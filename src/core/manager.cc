@@ -348,8 +348,8 @@ Manager::try_create_download_from_meta_download(torrent::Object* bencode, const 
 
   torrent::Object& meta = bencode->get_key("rtorrent_meta_download");
   torrent::Object::list_type& commands = meta.get_key_list("commands");
-  for (torrent::Object::list_type::const_iterator itr = commands.begin(); itr != commands.end(); ++itr)
-    f->commands().insert(f->commands().end(), itr->as_string());
+  for (const auto& command : commands)
+    f->commands().insert(f->commands().end(), command.as_string());
 
   f->set_start(meta.get_key_value("start"));
   f->set_print_log(meta.get_key_value("print_log"));
@@ -402,22 +402,22 @@ path_expand(std::vector<std::string>* paths, const std::string& pattern) {
 
     // Special case for ".."?
 
-    for (std::vector<utils::Directory>::iterator itr = currentCache.begin(); itr != currentCache.end(); ++itr) {
+    for (auto& itr : currentCache) {
       // Only include filenames starting with '.' if the pattern
       // starts with the same.
-      itr->update((r.pattern()[0] != '.') ? utils::Directory::update_hide_dot : 0);
-      itr->erase(std::remove_if(itr->begin(), itr->end(), [r](const utils::directory_entry& entry) { return !r(entry.s_name); }), itr->end());
+      itr.update((r.pattern()[0] != '.') ? utils::Directory::update_hide_dot : 0);
+      itr.erase(std::remove_if(itr.begin(), itr.end(), [r](const utils::directory_entry& entry) { return !r(entry.s_name); }), itr.end());
 
-      std::transform(itr->begin(), itr->end(), std::back_inserter(nextCache), [itr](const utils::directory_entry& entry) {
-          return path_expand_transform(itr->path() + (itr->path() == "/" ? "" : "/"), entry);
-        });
+      for (const auto& cache : itr)
+        nextCache.push_back(path_expand_transform(itr.path() + (itr.path() == "/" ? "" : "/"), cache));
     }
 
     currentCache.clear();
     currentCache.swap(nextCache);
   }
 
-  std::transform(currentCache.begin(), currentCache.end(), std::back_inserter(*paths), std::mem_fn(&utils::Directory::path));
+  for (const auto& cache : currentCache)
+    paths->push_back(cache.path());
 }
 
 bool
@@ -438,8 +438,8 @@ Manager::try_create_download_expand(const std::string& uri, int flags, command_l
   path_expand(&paths, uri);
 
   if (!paths.empty())
-    for (std::vector<std::string>::iterator itr = paths.begin(); itr != paths.end(); ++itr)
-      try_create_download(*itr, flags, commands);
+    for (auto& path : paths)
+      try_create_download(path, flags, commands);
 
   else
     try_create_download(uri, flags, commands);
@@ -450,8 +450,8 @@ Manager::try_create_download_expand(const std::string& uri, int flags, command_l
 // hashing view and starts hashing if nessesary.
 void
 Manager::receive_hashing_changed() {
-  bool foundHashing = std::find_if(m_hashingView->begin_visible(), m_hashingView->end_visible(),
-                                   std::mem_fn(&Download::is_hash_checking)) != m_hashingView->end_visible();
+  bool foundHashing = std::any_of(m_hashingView->begin_visible(), m_hashingView->end_visible(),
+                                   std::mem_fn(&Download::is_hash_checking));
 
   // Try quick hashing all those with hashing == initial, set them to
   // something else when failed.

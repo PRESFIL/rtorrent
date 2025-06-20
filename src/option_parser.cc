@@ -88,17 +88,17 @@ bool
 OptionParser::has_flag(char flag, int argc, char** argv) {
   char options[3] = { '-', flag, '\0' };
 
-  return std::find_if(argv, argv + argc, [&options](char* c) { return std::strcmp(c, options) == 0; }) != argv + argc;
+  return std::any_of(argv, argv + argc, [&options](char* c) { return std::strcmp(c, options) == 0; });
 }
 
 std::string
 OptionParser::create_optstring() {
   std::string s;
 
-  for (Container::iterator itr = m_container.begin(); itr != m_container.end(); ++itr) {
-    s += itr->first;
+  for (auto& itr : m_container) {
+    s += itr.first;
 
-    if (itr->second.m_useOption)
+    if (itr.second.m_useOption)
       s += ':';
   }
 

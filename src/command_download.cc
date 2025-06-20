@@ -265,12 +265,12 @@ retrieve_d_custom_map(core::Download* download, bool keys_only, const torrent::O
     throw torrent::bencode_error("d.custom.keys/items takes no arguments.");
 
   torrent::Object result = keys_only ? torrent::Object::create_list() : torrent::Object::create_map();
-  torrent::Object::map_type& entries = download->bencode()->get_key("rtorrent").get_key("custom").as_map();
 
-  for (torrent::Object::map_type::const_iterator itr = entries.begin(), last = entries.end(); itr != last; itr++) {
-    if (keys_only) result.as_list().push_back(itr->first);
-    else           result.as_map()[itr->first] = itr->second;
-  }
+  for (const auto& entry : download->bencode()->get_key("rtorrent").get_key("custom").as_map())
+    if (keys_only)
+      result.as_list().push_back(entry.first);
+    else
+      result.as_map()[entry.first] = entry.second;
 
   return result;
 }
@@ -353,25 +353,23 @@ f_multicall(core::Download* download, const torrent::Object::list_type& args) {
   bool use_regex = true;
 
   if (args.front().is_list())
-    std::transform(args.front().as_list().begin(), args.front().as_list().end(),
-                   std::back_inserter(regex_list),
-                   std::bind(&torrent::Object::as_string_c, std::placeholders::_1));
+    for (const auto& o : args.front().as_list())
+      regex_list.push_back(o.as_string_c());
   else if (args.front().is_string() && !args.front().as_string().empty())
     regex_list.push_back(args.front().as_string());
   else
     use_regex = false;
 
-  for (torrent::FileList::const_iterator itr = download->file_list()->begin(), last = download->file_list()->end(); itr != last; itr++) {
+  for (const auto& file : *download->file_list()) {
     if (use_regex &&
-        std::find_if(regex_list.begin(), regex_list.end(),
-                     std::bind(&rak::regex::operator(), std::placeholders::_1, (*itr)->path()->as_string())) == regex_list.end())
+        std::none_of(regex_list.begin(), regex_list.end(), [&file](const auto& r) { return r(file->path()->as_string()); }))
       continue;
 
     torrent::Object::list_type& row = result.insert(result.end(), torrent::Object::create_list())->as_list();
 
     for (torrent::Object::list_const_iterator cItr = ++args.begin(); cItr != args.end(); cItr++) {
       const std::string& cmd = cItr->as_string();
-      row.push_back(rpc::parse_command(rpc::make_target(itr->get()), cmd.c_str(), cmd.c_str() + cmd.size()).first);
+      row.push_back(rpc::parse_command(rpc::make_target(file.get()), cmd.c_str(), cmd.c_str() + cmd.size()).first);
     }
   }
 
@@ -421,14 +419,13 @@ p_multicall(core::Download* download, const torrent::Object::list_type& args) {
   torrent::Object             resultRaw = torrent::Object::create_list();
   torrent::Object::list_type& result = resultRaw.as_list();
 
-  for (torrent::ConnectionList::const_iterator itr = download->connection_list()->begin(), last = download->connection_list()->end();
-       itr != last; itr++) {
+  for (const auto& connection : *download->connection_list()) {
     torrent::Object::list_type& row = result.insert(result.end(), torrent::Object::create_list())->as_list();
 
     for (torrent::Object::list_const_iterator cItr = ++args.begin(); cItr != args.end(); cItr++) {
       const std::string& cmd = cItr->as_string();
 
-      row.push_back(rpc::parse_command(rpc::make_target(*itr), cmd.c_str(), cmd.c_str() + cmd.size()).first);
+      row.push_back(rpc::parse_command(rpc::make_target(connection), cmd.c_str(), cmd.c_str() + cmd.size()).first);
     }
   }
 
@@ -558,7 +555,7 @@ d_list_push_back_unique(core::Download* download, const torrent::Object& rawArgs
   const torrent::Object& args = (rawArgs.is_list() && !rawArgs.as_list().empty()) ? rawArgs.as_list().front() : rawArgs;
   torrent::Object::list_type& list = download_get_variable(download, first_key, second_key).as_list();
 
-  if (std::find_if(list.begin(), list.end(), [args](const torrent::Object& obj) { return torrent::object_equal(obj, args); }) == list.end())
+  if (std::none_of(list.begin(), list.end(), [args](const torrent::Object& obj) { return torrent::object_equal(obj, args); }))
     list.push_back(rawArgs);
 
   return torrent::Object();
@@ -569,7 +566,7 @@ d_list_has(core::Download* download, const torrent::Object& rawArgs, const char*
   const torrent::Object& args = (rawArgs.is_list() && !rawArgs.as_list().empty()) ? rawArgs.as_list().front() : rawArgs;
   torrent::Object::list_type& list = download_get_variable(download, first_key, second_key).as_list();
 
-  return (int64_t)(std::find_if(list.begin(), list.end(), [args](const torrent::Object& obj) { return torrent::object_equal(obj, args); }) != list.end());
+  return (int64_t)(std::any_of(list.begin(), list.end(), [args](const auto& obj) { return torrent::object_equal(obj, args); }));
 }
 
 torrent::Object
